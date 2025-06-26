@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 Tokens = {
     "OBrace": "{",
     "CBrace": "}",
@@ -29,10 +31,13 @@ class JSON_Value:
 
 
 class JSON:
-    fields: dict
+    fields = defaultdict(list)
 
-    def __init__(self, key: str, value: JSON_Value):
-        self.fields[key] = value
+    def __init__(self):
+        return
+
+    def __str__(self):
+        return "{\n" + self.fields.__str__() + "\n}\n"
 
 
 class JSON_Token:
@@ -90,6 +95,22 @@ class JSON_Token:
                 raise JSONError(f"Syntax Error: {tok_str} is an invalid token")
 
 
+def stack_unwind(stack: list, val: str):
+    match val:
+        case "CBracket":
+            if stack[-1] == "OBracket":
+                stack.pop()
+            else:
+                raise JSONError(f"Syntax error: expected CBracket but got {val}")
+        case "CBrace":
+            if stack[-1] == "OBrace":
+                stack.pop()
+            else:
+                raise JSONError(f"Syntax error: expected CBracket but got {val}")
+        case _:
+            raise JSONError(f"Unexpected token: {val}")
+
+
 def JSONParse(json: str):
     # Order will always be:
     #   {
@@ -97,21 +118,117 @@ def JSONParse(json: str):
     #   :
     #   Value
     #   ,  or  unwind stack
+    output: JSON = None
     toks = tokenize(json)
-    return
-    tok_stk = []
-    exp_tok = ["{"]
-    tok_req = True
+    obj_stk = []  # The object stack
+    tok_stk = []  # The token stack (contains OBracket and OBraces waiting for their pair)
+    exp_tok_type = ["OBrace"]
+    val_or_key = "Key"
+    in_array = False # BUG: This doesn't support multidimensional arrays...Possibly could be fixed with an array stack holding the array indices
+    last_key = ""
     for token in toks:
-        if tok_req:
-            if token not in exp_tok:
-                raise JSONError(f"Syntax Error, expected \'{exp_tok}\' but got \'{token}\'")
-            else:
-                if token == "{":
-                    tok_stk.append(token)
-                    exp_tok.clear()
-                    exp_tok.append("}", "string")
-                    tok_req = False
+        if token.type != "Boolean" and token.type != "Null" and token.type != "Number":
+            print(token.type + "   " + token.value + "   " + val_or_key + "   " + str(len(obj_stk)))
+        if token.type not in exp_tok_type:
+            raise JSONError(f"Syntax Error, expected \'{exp_tok_type}\' but got \'{token.type}\'")
+        else:
+            # Parse OBrace
+            if token.type == "OBrace":
+                obj_stk.append(JSON())
+                if not output:
+                    output = obj_stk[-1]
+                else:
+                    if in_array:
+                        obj_stk[-2].fields[last_key].append(obj_stk[-1])
+                    else:
+                        obj_stk[-2].fields[last_key] = obj_stk[-1]
+                tok_stk.append(token.type)
+                exp_tok_type = ["CBrace", "String"]
+                val_or_key = "Key"
+            # Parse CBrace
+            if token.type == "CBrace":
+                exp_tok_type = ["CBrace", "CBracket", "Comma"]
+                obj_stk.pop()
+                stack_unwind(tok_stk, token.type)
+            # Parse OBracket
+            if token.type == "OBracket":
+                exp_tok_type = ["String", "Number", "OBrace", "Boolean", "Null"]
+                tok_stk.append(token.type)
+                in_array = True
+            # Parse CBracket
+            if token.type == "CBracket":
+                exp_tok_type = ["CBrace", "CBracket", "Comma"]
+                stack_unwind(tok_stk, token.type)
+                in_array = False
+                last_key = ""
+            # Parse Colon
+            elif token.type == "Colon":
+                exp_tok_type = ["String", "Number", "Boolean", "Null", "OBracket", "OBrace"]
+                val_or_key = "Value"
+            # Parse Comma
+            elif token.type == "Comma":
+                if not in_array:
+                    val_or_key = "Key"
+                exp_tok_type = ["String"]
+            # Parse String
+            elif token.type == "String":
+                if val_or_key == "Key":
+                    last_key = token.value
+                    exp_tok_type = ["Colon"]
+                else:
+                    if last_key == "":
+                        raise JSONError("Syntax Error: key names cannot be empty")
+                    else:
+                        if in_array:
+                            obj_stk[-1].fields[last_key].append(token.value)
+                        else:
+                            obj_stk[-1].fields[last_key] = token.value
+                            last_key = ""
+                        exp_tok_type = ["Comma", "CBracket", "CBrace"]
+            # Parse Number
+            elif token.type == "Number":
+                if val_or_key == "Key":
+                    raise JSONError(f"Syntax Error: expected a string but got {token.type}")
+                else:
+                    if last_key == "":
+                        raise JSONError("Syntax Error: key names cannot be empty")
+                    else:
+                        if in_array:
+                            obj_stk[-1].fields[last_key].append(token.value)
+                        else:
+                            obj_stk[-1].fields[last_key] = token.value
+                        last_key = ""
+                        exp_tok_type = ["Comma", "CBracket", "CBrace"]
+            # Parse Booleans
+            elif token.type == "Boolean":
+                if val_or_key == "Key":
+                    raise JSONError(f"Syntax Error: expected a string but got {token.type}")
+                else:
+                    if last_key == "":
+                        raise JSONError("Syntax Error: key names cannot be empty")
+                    else:
+                        if in_array:
+                            obj_stk[-1].fields[last_key].append(token.value)
+                        else:
+                            obj_stk[-1].fields[last_key] = token.value
+                        last_key = ""
+                        exp_tok_type = ["Comma", "CBracket", "CBrace"]
+            # Parse Null
+            elif token.type == "Null":
+                if val_or_key == "Key":
+                    raise JSONError(f"Syntax Error: expected a string but got {token.type}")
+                else:
+                    if last_key == "":
+                        raise JSONError("Syntax Error: key names cannot be empty")
+                    else:
+                        if in_array:
+                            obj_stk[-1].fields[last_key].append(token.value)
+                        else:
+                            obj_stk[-1].fields[last_key] = token.value
+                        last_key = ""
+                        exp_tok_type = ["Comma", "CBracket", "CBrace"]
+    return output
+
 
 
 def char_in_number(c: str):
@@ -182,10 +299,10 @@ def tokenize(json: str):
                     in_string = True
                     start_index = index
     json_tokens = []
-    print("String                    | Type     | Value")
+    # print("String                    | Type     | Value")
     for tok in tokens:
         t = JSON_Token(tok)
-        print(f"{tok:<25.25} | {t.type:<8} | {t.value}")
+        # print(f"{tok:<25.25} | {t.type:<8} | {t.value}")
         json_tokens.append(t)
     return json_tokens
 
@@ -193,7 +310,8 @@ def tokenize(json: str):
 if __name__ == '__main__':
     with open("../sample.json", mode='r') as f:
         json = f.read()
-        JSONParse(json)
+        json_obj = JSONParse(json)
+        print(json_obj)
 
 # Expect next token
 #   Last Token     | Expected Token

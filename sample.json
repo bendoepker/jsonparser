@@ -6,15 +6,16 @@
 			"GlossList": {
                 "GlossEntry": {
                     "ID": "SGML",
-					"SortAs": "SGML",
+					"SortAs": "true",
 					"GlossTerm": "Standard Generalized Markup Language",
-					"Acronym": "SGML",
+					"Acronym": "false",
 					"Abbrev": "ISO 8879:1986",
 					"GlossDef": {
                         "para": "A meta-markup language, used to create markup languages such as DocBook.",
-						"GlossSeeAlso": ["GML", "XML"]
+						"GlossSeeAlso": ["GML", "XML"],
+                        "data2": "null"
                     },
-					"GlossNum": 18
+					"GlossNum": -18.3e-6
                 }
             }
         }
